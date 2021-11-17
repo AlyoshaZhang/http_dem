@@ -140,10 +140,10 @@ void do_http_request(int client_sock){
 		
 		//执行http响应
 		//判断文件是否存在，如果存在就响应200 OK , 同时发送相应的 html 文件， 如果不存在，就响应 404 NOT FOUND.
-		if(!stat(path, &st)){
-			do_http_response(client_sock);
-		}else{
+		if(stat(path, &st) == -1){
 			not_found(client_sock);
+		}else{
+			do_http_response(client_sock);
 		}	
 		
 	}else{//非GET请求，读取http头部，并响应客户端501 Method Not Implemented
