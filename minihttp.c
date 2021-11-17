@@ -5,6 +5,8 @@
 #include <string.h>
 #include <ctype.h>
 #include <arpa/inet.h>
+#include <sys/stat.h>
+#include <errno.h>
 
 #define SERVER_PORT 80
 
@@ -16,6 +18,7 @@ static int debug = 1;
 int get_line(int client_sock, char* buf, int size);
 void do_http_request(int client_sock);
 void do_http_response(int client_sock);
+void not_found(int client_sock);
 
 int main(void){
 	int sock;			//socket 套接字 
@@ -73,7 +76,7 @@ void do_http_request(int client_sock){
 	char method[64];
 	char url[REQUEST_LINE_LEN];	
 	char path[512];
-
+	struct stat st;
 
 /*	do{	
 		//1.读取请求行
@@ -130,11 +133,18 @@ void do_http_request(int client_sock){
 			}
 		}
 
-		sprintf(path, "./html_docs/%s",url);
+		sprintf(path, "./html_demo/%s",url);
 		if(debug){
 			printf("path: %s\n", path);
+		}
+		
+		//执行http响应
+		//判断文件是否存在，如果存在就响应200 OK , 同时发送相应的 html 文件， 如果不存在，就响应 404 NOT FOUND.
+		if(!stat(path, &st)){
+			do_http_response(client_sock);
+		}else{
+			not_found(client_sock);
 		}	
-		do_http_response(client_sock);
 		
 	}else{//非GET请求，读取http头部，并响应客户端501 Method Not Implemented
 		fprintf(stderr, "other request [%s]\n", method);
@@ -241,7 +251,28 @@ int get_line(int client_sock, char* buf, int size){
 	return len;
 }
 
+void not_found(int client_sock){
+	const char * reply = "HTTP/1.0 404 NOT FOUND\r\n\
+Content-Type: text/html\r\n\
+\r\n\
+<HTML lang=\"zh-CN\">\r\n\
+<meta content=\"text/html; charset=utf-8\" http-equiv=\"Content-Type\">\r\n\
+<HEAD>\r\n\
+<TITLE>NOT FOUND</TITLE>\r\n\
+</HEAD>\r\n\
+<BODY>\r\n\
+	<P>文件不存在！\r\n\
+ 	<P>The server could not fulfill your request because the resource specified is unavailable or nonexistent.\r\n\
+</BODY>\r\n\
+</HTML>";
 
+	int len = write(client_sock, reply, strlen(reply));
+	if(debug)
+		fprintf(stdout, "write len[%d], write reason: %s\n", len, reply);
+	if(len <= 0){
+		fprintf(stderr, "send reply failed. reason: %s\n", strerror(errno));
+	}
+}
 
 
 
