@@ -133,7 +133,8 @@ void do_http_request(int client_sock){
 		sprintf(path, "./html_docs/%s",url);
 		if(debug){
 			printf("path: %s\n", path);
-		}
+		}	
+		do_http_response(client_sock);
 		
 	}else{//非GET请求，读取http头部，并响应客户端501 Method Not Implemented
 		fprintf(stderr, "other request [%s]\n", method);
@@ -193,13 +194,11 @@ void do_http_response(int client_sock){
 		fprintf(stdout, "write[%d]: %s\n", len, send_buf);
 	}
 	
+	//3.发送html 文件内容
 	len = write(client_sock, welcome_content, wc_len);
 	if(debug){
 		fprintf(stdout, "write[%d]: %s\n", len, welcome_content);
 	}
-	//3.发送html 文件内容
-	
-
 }
 
 
