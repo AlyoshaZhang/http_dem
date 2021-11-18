@@ -238,7 +238,42 @@ void do_http_responsel(int client_sock){
 
 
 void cat(int client_sock, FILE* resource){
-
+	/*char buf[1024];
+	
+	fgets(buf, sizeof(buf), resource);
+	
+	while(!feof(resource)){
+		int len = write(client_sock, buf, strlen(buf));
+		if(len < 0){//送的过程中出现问题		重试	
+			fprintf(stderr, "send body error. reason: %s\n", strerror(errno)); 
+			break;
+		}
+		
+		if(debug){
+			fprintf(stdout, "%s",buf);
+		}
+		fgets(buf, sizeof(buf), resource);
+	}
+*/
+	
+	const char * reply = "HTTP/1.0 404 NOT FOUND\r\n\
+Content-Type: text/html\r\n\
+\r\n\
+<HTML lang=\"zh-CN\">\r\n\
+<meta content=\"text/html; charset=utf-8\" http-equiv=\"Content-Type\">\r\n\
+<HEAD>\r\n\
+<TITLE>NOT FOUND</TITLE>\r\n\
+</HEAD>\r\n\
+<BODY>\r\n\
+	<P>文件不存在！\r\n\
+ 	<P>The server could not fulfill your request because the resource specified is unavailable or nonexistent.\r\n\
+</BODY>\r\n\
+</HTML>";
+	
+	int len = write(client_sock, reply, strlen(reply));
+	if(len < 0){
+		fprintf(stderr, "send body error. reason: %s\n:",strerror(errno));
+	}	
 }
 
 void headers(int client_sock, FILE* resource){
