@@ -17,8 +17,12 @@ static int debug = 1;
 
 int get_line(int client_sock, char* buf, int size);
 void do_http_request(int client_sock);
-void do_http_response(int client_sock);
+void do_http_response(int client_sock, const char* path);
+void do_http_responsel(int client_sock);
 void not_found(int client_sock);
+void headers(int client_sock, FILE* resource);
+void cat(int client_sock, FILE* resource);
+void inner_error(int client_sock);
 
 int main(void){
 	int sock;			//socket 套接字 
@@ -143,7 +147,10 @@ void do_http_request(int client_sock){
 		if(stat(path, &st) == -1){
 			not_found(client_sock);
 		}else{
-			do_http_response(client_sock);
+			if(S_ISDIR(st.st_mode)){
+				strcat(path, "index.html");
+			}
+			do_http_response(client_sock, path);
 		}	
 		
 	}else{//非GET请求，读取http头部，并响应客户端501 Method Not Implemented
@@ -164,7 +171,25 @@ void do_http_request(int client_sock){
 	
 }
 
-void do_http_response(int client_sock){
+void do_http_response(int client_sock, const char* path){
+	FILE* resource = NULL;
+	resource = fopen(path, "r");
+	if(resource == NULL){
+		not_found(client_sock);
+		return;
+	}
+
+	//1.发送 http 头部.
+	headers(client_sock, resource);	
+	//2.发送 http body.
+	cat(client_sock, resource);
+
+	fclose(resource);
+	
+	return;
+}
+
+void do_http_responsel(int client_sock){
 	const char* main_header = "HTTP/1.0 200 OK\r\nServer: Dawenwen Server\r\nContent-Type: text/html\r\nConnection: Close\r\n";
 	const char* welcome_content = "<html lang=\"zh-CN\">\n\
 					<head>\n\
@@ -212,6 +237,37 @@ void do_http_response(int client_sock){
 }
 
 
+void cat(int client_sock, FILE* resource){
+
+}
+
+void headers(int client_sock, FILE* resource){
+	struct stat st;
+	int fileid = 0;
+	char tmp[64];
+	char buf[1024] = {0};
+	strcpy(buf, "HTTP/1.0 200 OK\r\n");
+	strcat(buf, "Server: Dawenwen Server\r\n");
+	strcat(buf, "Content-Type: text/thml\r\n");
+	strcat(buf, "Connection: Close\r\n");
+	
+	fileid = fileno(resource);				//返回文件的 fd
+	if(fstat(fileid, &st) == -1){
+		inner_error(client_sock);
+	}
+	
+	snprintf(tmp, 64, "Content-Length: %ld\r\n\r\n", st.st_size);
+	strcat(buf, tmp);
+
+	if(debug){
+		fprintf(stdout, "header: %s\n", buf);	
+	}
+
+	if(send(client_sock, buf, strlen(buf), 0) < 0){
+		fprintf(stderr, "send failed. data: %s, reason: %s\n", buf, strerror(errno));
+	}
+	
+}
 
 int get_line(int client_sock, char* buf, int size){
 	char ch = '\0';
@@ -275,6 +331,27 @@ Content-Type: text/html\r\n\
 }
 
 
+void inner_error(int client_sock){
+	const char * reply = "HTTP/1.0 500 Internal Sever Error\r\n\
+Content-Type: text/html\r\n\
+\r\n\
+<HTML lang=\"zh-CN\">\r\n\
+<meta content=\"text/html; charset=utf-8\" http-equiv=\"Content-Type\">\r\n\
+<HEAD>\r\n\
+<TITLE>Inner Error</TITLE>\r\n\
+</HEAD>\r\n\
+<BODY>\r\n\
+    <P>服务器内部出错.\r\n\
+</BODY>\r\n\
+</HTML>";
+
+	int len = write(client_sock, reply, strlen(reply));
+	if(debug) fprintf(stdout,"%s", reply);
+	
+	if(len <=0){
+		fprintf(stderr, "send reply failed. reason: %s\n", strerror(errno));
+	}
+}
 
 
 
