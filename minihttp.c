@@ -238,7 +238,9 @@ void do_http_responsel(int client_sock){
 
 
 void cat(int client_sock, FILE* resource){
-	/*char buf[1024];
+	if(debug)
+		printf("---------------------响应正文-------------------------\n");
+	char buf[1024];
 	
 	fgets(buf, sizeof(buf), resource);
 	
@@ -254,52 +256,44 @@ void cat(int client_sock, FILE* resource){
 		}
 		fgets(buf, sizeof(buf), resource);
 	}
-*/
+
+	if(debug){
+		printf("----------------------响应正文结束-------------------------\n");
+	}
 	
-	const char * reply = "HTTP/1.0 404 NOT FOUND\r\n\
-Content-Type: text/html\r\n\
-\r\n\
-<HTML lang=\"zh-CN\">\r\n\
-<meta content=\"text/html; charset=utf-8\" http-equiv=\"Content-Type\">\r\n\
-<HEAD>\r\n\
-<TITLE>NOT FOUND</TITLE>\r\n\
-</HEAD>\r\n\
-<BODY>\r\n\
-	<P>文件不存在！\r\n\
- 	<P>The server could not fulfill your request because the resource specified is unavailable or nonexistent.\r\n\
-</BODY>\r\n\
-</HTML>";
-	
-	int len = write(client_sock, reply, strlen(reply));
-	if(len < 0){
-		fprintf(stderr, "send body error. reason: %s\n:",strerror(errno));
-	}	
 }
 
 void headers(int client_sock, FILE* resource){
+	if(debug){
+		printf("---------状态行和消息报头写入socket---------\n");
+	}
 	struct stat st;
 	int fileid = 0;
 	char tmp[64];
 	char buf[1024] = {0};
 	strcpy(buf, "HTTP/1.0 200 OK\r\n");
-	strcat(buf, "Server: Dawenwen Server\r\n");
-	strcat(buf, "Content-Type: text/thml\r\n");
-	strcat(buf, "Connection: Close\r\n");
+	strcat(buf, "Server:Dawenwen Server\r\n");
+	strcat(buf, "Content-Type:text/html\r\n");
+	strcat(buf, "Connection:Close\r\n");
 	
 	fileid = fileno(resource);				//返回文件的 fd
 	if(fstat(fileid, &st) == -1){
 		inner_error(client_sock);
 	}
 	
-	snprintf(tmp, 64, "Content-Length: %ld\r\n\r\n", st.st_size);
+	snprintf(tmp, 64, "Content-Length:%ld\r\n\r\n", st.st_size);
 	strcat(buf, tmp);
 
 	if(debug){
-		fprintf(stdout, "header: %s\n", buf);	
+		fprintf(stdout, "header:%s\n", buf);	
 	}
 
 	if(send(client_sock, buf, strlen(buf), 0) < 0){
 		fprintf(stderr, "send failed. data: %s, reason: %s\n", buf, strerror(errno));
+	}
+
+	if(debug){
+		printf("---------状态行和消息报头结束写入----------------------------\n");
 	}
 	
 }
