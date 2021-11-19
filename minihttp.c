@@ -19,8 +19,12 @@ int get_line(int client_sock, char* buf, int size);
 void do_http_request(int client_sock);
 void do_http_response(int client_sock, const char* path);
 void do_http_responsel(int client_sock);
-void not_found(int client_sock);
-void headers(int client_sock, FILE* resource);
+
+void not_found(int client_sock);			//404
+void unimplemented(int client_sock);			//500
+void bad_request(int client_sock);				//400
+
+int headers(int client_sock, FILE* resource);
 void cat(int client_sock, FILE* resource);
 void inner_error(int client_sock);
 
@@ -105,7 +109,7 @@ void do_http_request(int client_sock){
 			printf("request method: %s \n", method);
 	}else{
 	//请求格式有问题，出错处理
-	//bad	
+	bad_request(client_sock);				//400
 
 	}
 	
@@ -156,7 +160,7 @@ void do_http_request(int client_sock){
 	}else{//非GET请求，读取http头部，并响应客户端501 Method Not Implemented
 		fprintf(stderr, "other request [%s]\n", method);
 
-		//unimplemented(client_sock);	//在响应实现
+		unimplemented(client_sock);	
 	}
 	
 	//继续读取http 头部
@@ -172,6 +176,7 @@ void do_http_request(int client_sock){
 }
 
 void do_http_response(int client_sock, const char* path){
+	int ret = 0;
 	FILE* resource = NULL;
 	resource = fopen(path, "r");
 	if(resource == NULL){
@@ -180,9 +185,11 @@ void do_http_response(int client_sock, const char* path){
 	}
 
 	//1.发送 http 头部.
-	headers(client_sock, resource);	
-	//2.发送 http body.
-	cat(client_sock, resource);
+	ret = headers(client_sock, resource);	
+	if(!ret){	
+		//2.发送 http body.
+		cat(client_sock, resource);
+	}
 
 	fclose(resource);
 	
@@ -263,7 +270,7 @@ void cat(int client_sock, FILE* resource){
 	
 }
 
-void headers(int client_sock, FILE* resource){
+int headers(int client_sock, FILE* resource){
 	if(debug){
 		printf("---------状态行和消息报头写入socket---------\n");
 	}
@@ -279,6 +286,7 @@ void headers(int client_sock, FILE* resource){
 	fileid = fileno(resource);				//返回文件的 fd
 	if(fstat(fileid, &st) == -1){
 		inner_error(client_sock);
+		return -1;
 	}
 	
 	snprintf(tmp, 64, "Content-Length:%ld\r\n\r\n", st.st_size);
@@ -290,12 +298,13 @@ void headers(int client_sock, FILE* resource){
 
 	if(send(client_sock, buf, strlen(buf), 0) < 0){
 		fprintf(stderr, "send failed. data: %s, reason: %s\n", buf, strerror(errno));
+		return -1;
 	}
 
 	if(debug){
 		printf("---------状态行和消息报头结束写入----------------------------\n");
 	}
-	
+	return 0;
 }
 
 int get_line(int client_sock, char* buf, int size){
@@ -336,30 +345,6 @@ int get_line(int client_sock, char* buf, int size){
 	return len;
 }
 
-void not_found(int client_sock){
-	const char * reply = "HTTP/1.0 404 NOT FOUND\r\n\
-Content-Type: text/html\r\n\
-\r\n\
-<HTML lang=\"zh-CN\">\r\n\
-<meta content=\"text/html; charset=utf-8\" http-equiv=\"Content-Type\">\r\n\
-<HEAD>\r\n\
-<TITLE>NOT FOUND</TITLE>\r\n\
-</HEAD>\r\n\
-<BODY>\r\n\
-	<P>文件不存在！\r\n\
- 	<P>The server could not fulfill your request because the resource specified is unavailable or nonexistent.\r\n\
-</BODY>\r\n\
-</HTML>";
-
-	int len = write(client_sock, reply, strlen(reply));
-	if(debug)
-		fprintf(stdout, "write len[%d], write reason: %s\n", len, reply);
-	if(len <= 0){
-		fprintf(stderr, "send reply failed. reason: %s\n", strerror(errno));
-	}
-}
-
-
 void inner_error(int client_sock){
 	const char * reply = "HTTP/1.0 500 Internal Sever Error\r\n\
 Content-Type: text/html\r\n\
@@ -382,10 +367,74 @@ Content-Type: text/html\r\n\
 	}
 }
 
+void not_found(int client_sock){
+	const char * reply = "HTTP/1.0 404 NOT FOUND\r\n\
+Content-Type: text/html\r\n\
+\r\n\
+<HTML lang=\"zh-CN\">\r\n\
+<meta content=\"text/html; charset=utf-8\" http-equiv=\"Content-Type\">\r\n\
+<HEAD>\r\n\
+<TITLE>NOT FOUND</TITLE>\r\n\
+</HEAD>\r\n\
+<BODY>\r\n\
+	<P>文件不存在！\r\n\
+ 	<P>The server could not fulfill your request because the resource specified is unavailable or nonexistent.\r\n\
+</BODY>\r\n\
+</HTML>";
 
+	int len = write(client_sock, reply, strlen(reply));
+	if(debug)
+		fprintf(stdout, "write len[%d], write reason: %s\n", len, reply);
+	if(len <= 0){
+		fprintf(stderr, "send reply failed. reason: %s\n", strerror(errno));
+	}
 
+}
 
+void unimplemented(int client_sock){
+	const char* reply = "HTTP/1.0 500 Internal Sever Error\r\n\
+Content-Type: text/html\r\n\
+\r\n\
+<HTML>\
+<HEAD>\
+<TITLE>Method Not Implemented</TITLE>\
+</HEAD>\
+<BODY>\
+    <P>Error prohibited CGI execution.\
+</BODY>\
+</HTML>";
 
+	int len = write(client_sock, reply, strlen(reply));
+        if(debug) fprintf(stdout,"%s", reply);
+
+        if(len <=0){
+                fprintf(stderr, "send reply failed. reason: %s\n", strerror(errno));
+        }
+	
+}
+
+void bad_request(int client_sock){
+	const char* reply = "HTTP/1.0 400 BAD REQUEST\r\n\
+Content-Type: text/html\r\n\
+\r\n\
+<HTML>\
+<HEAD>\
+<TITLE>BAD REQUEST</TITLE>\
+</HEAD>\
+<BODY>\
+    <P>Your browser sent a bad request！\
+</BODY>\
+</HTML>";
+	
+	int len = write(client_sock, reply, strlen(reply));
+        if(debug) fprintf(stdout,"%s", reply);
+
+        if(len <=0){
+                fprintf(stderr, "send reply failed. reason: %s\n", strerror(errno));
+        }
+	
+
+}
 
 
 
